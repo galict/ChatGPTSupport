@@ -1,0 +1,100 @@
+﻿@page "/"
+
+@using OpenAI.Net
+
+@inject IOpenAIService openAiService;
+
+<h1>Linux web hosting support chatbot</h1>
+
+<div class="container">
+    <div class="chatbox">
+        <div class="chatbox__support @toggleClass">
+            <div class="chatbox__header">
+                <div class="chatbox__image--header">
+                    <img src="/images/woman.svg" alt="image">
+                </div>
+                <div class="chatbox__content--header">
+                    <h4 class="chatbox__heading--header">Chat support</h4>
+                    <p class="chatbox__description--header">Hi. How can I help you?</p>
+                </div>
+            </div>
+            <div class="chatbox__messages">
+                <div></div>
+                @((MarkupString)displayedMessages)
+            </div>
+            <div class="chatbox__footer">
+                <input type="text" placeholder="Write a message..." @bind="@userInput" @onkeyup="OnEnter">
+                <button class="chatbox__send--footer send__button" @onclick="OnSendButton">Send</button>
+            </div>
+        </div>
+        <div class="chatbox__button" @onclick="ToggleState">
+            <button><img src="/images/chatbox-icon.svg" /></button>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private string toggleClass = "";
+    private bool isChatBoxVisible = false;
+    private string userInput = "";
+    private string displayedMessages = "";
+    private static string primeDirective = @"Please fully immerse yourself in the persona of a customer support agent specialized for problems related to Linux web hosting. 
+Speaking style should be professional and only related to topics of Linux and web hosting. 
+If a user asks anything other than this topics answer with: I am sorry this question is not related to the subject of Linux web hosting.";
+
+    List<Message> messageHistory = new List<Message> 
+    {
+        Message.Create(ChatRoleType.System, primeDirective),
+    };
+
+    private async Task Search()
+    {
+        string currentMessage = "";
+        messageHistory.Add(Message.Create(ChatRoleType.User, userInput));
+
+        await foreach (var t in openAiService.Chat.GetStream(messageHistory, options =>
+                                                            {
+                                                                options.Model = ModelTypes.GPT35Turbo;
+                                                                options.MaxTokens = 512;
+                                                            }))
+        {
+            currentMessage += t?.Result?.Choices[0].Delta?.Content;
+        }
+
+        messageHistory.Add(Message.Create(ChatRoleType.Assistant, currentMessage));
+
+        displayedMessages += $"<div class='messages__item messages__item--support'>{currentMessage}</div>";
+        userInput = "";
+
+        StateHasChanged();
+    }
+
+    private void ToggleState()
+    {
+        isChatBoxVisible = !isChatBoxVisible;
+
+        toggleClass = isChatBoxVisible ? "chatbox--active" : "";
+    }
+
+    private async void OnEnter(KeyboardEventArgs e)
+    {
+        if (e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            UpdateCustomerChatText();
+            await Search();
+        }
+    }
+
+    private async void OnSendButton()
+    {
+        UpdateCustomerChatText();
+        await Search();
+    }
+
+    private void UpdateCustomerChatText()
+    {
+        displayedMessages += $"<div class='messages__item messages__item--customer'>{userInput}</div>";
+        StateHasChanged();
+    }
+}
